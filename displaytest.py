@@ -2,6 +2,7 @@ from   selenium import webdriver
 from   selenium.common.exceptions import TimeoutException
 from AUTH import ucsdsso
 import time
+from bs4 import BeautifulSoup
 driver = webdriver.Firefox()
 
 driver.get("https://hdh2.ucsd.edu/ssoStudent/rmsportal/Home/R") #Link to room selection portal, will prompt us with a login page
@@ -38,10 +39,11 @@ driver.implicitly_wait(10) # Wait up to 10 seconds to wait for elements to load 
 apartments = driver.find_elements_by_xpath('//*[@rmssellevel="Building"]') #Finally at vacancy viewer, find all clickable building menus to display information for each
 #print(apartments)
 count_buildings = 0
+start_time = time.time()
 for building in apartments: #For each building we can click, click it and begin diving deeper and scraping its information
     if building != driver.find_element_by_id('ELAIDBuilding'):
         count_buildings+=1
-        #print("Number of Apartments", len(apartments)-1, "Count investigated", count_buildings)
+        print("Number of Apartments", len(apartments)-1, "Count investigated", count_buildings)
         building.click()
         time.sleep(.05)
         
@@ -49,33 +51,34 @@ for building in apartments: #For each building we can click, click it and begin 
         count_room = 0
         for room in rooms:
             count_room+=1
-            #print(len(rooms), 'Rooms expanded: ',count_room)
-            time.sleep(.10)
+            print(len(rooms), 'Rooms expanded: ',count_room)
+            time.sleep(.1)
             room.click()
 
-        suite_information = driver.find_elements_by_xpath('//div[@id="RoomRowsScrollableContainer"]//table//tbody//*//tbody//tr') #
-        for item in suite_information:
-            if item.get_attribute('class') == 'RoomSelectResultsSuiteRow':
-                suite_id = item.find_element_by_xpath('//a[@class = "SuiteDetailInfo"]//span').text
-                #print('suite_id', suite_id)
-            else:
-                n=0
-                room_id_elements = item.find_elements_by_xpath('//tr[@class="RoomSelectResultsRoomRow"]')
-                for room_id_element in room_id_elements:
-                    room_id = room_id_element.get_attribute('rmsroomid')
-                    #print('room_id', room_id)
-                    available = item.find_elements_by_xpath('//tr[@rmsroomid="'+room_id+'"]//span')[1].text
-                    #print("ROOM AVAILABILITY",available)
-                    
-                    bed_space_elements = item.find_elements_by_xpath('//table[@rmsroomid="'+room_id+'"]//tr[@class="bedSpaceContainerItem"]')
-                    for bed_space_element in bed_space_elements:
-                        bed_space_id = bed_space_element.get_attribute('rmsbedspaceid')
-                        #print('bed space id', bed_space_id)
-                        room_type = bed_space_element.find_elements_by_xpath('.//td//span')[1].text
-                        #print('room type', room_type)
-            print('suite')
-                    
+        soup=BeautifulSoup(driver.page_source, 'lxml')
+        #print(soup)
+        count=0
+        suite_detail_information = soup.find_all('tr', class_="RoomSelectResultsSuiteRow")
+        for suite in suite_detail_information:
+            suite_id = suite.find('a', class_="SuiteDetailInfo").span.string
+            print('suite_id', suite_id)
+            room_container = suite.find_next_sibling('tr')
+            #print(room_container)
+            rooms = room_container.find_all('tr', class_="RoomSelectResultsRoomRow")
+            for room in rooms:
+                room_availability = room.find_all('span')[1].string
+                print('room_availability: ', room_availability)
+                room_id = room['rmsroomid']
+                print('room_id: ',room_id)
+                bed_space_container = room.find_next_sibling('tr')
+                bed_spaces = bed_space_container.find_all('tr',class_="bedSpaceContainerItem")
+                for bed_space in bed_spaces:
+                    bed_space_id = bed_space['rmsbedspaceid']
+                    print('bed_space_id: ',bed_space_id)
+                    room_type = bed_space.find_all('span')[1].string
+                    print('room_type: ',room_type)
 
-
+elapsed_time = time.time()-start_time
+print(elapsed_time)
 print(driver.current_url)
 
