@@ -7,6 +7,8 @@ import time
 from bs4 import BeautifulSoup
 from datascience import *
 import numpy as np
+from datetime import datetime
+import pandas as pd
 
 def available_dissect(room_availability):
         return int(room_availability.replace('(', '').replace(')','').replace('available',''))
@@ -19,6 +21,7 @@ def room_type_dissect(room_type):
         return 'triple'
     elif 'occupied' in room_type.lower():
         return 'none'
+
 def suite_name_dissect(suite_id):
     parts = suite_id.split('-')
     #print(suite_id)
@@ -68,11 +71,10 @@ apartments = driver.find_elements_by_xpath('//*[@rmssellevel="Building"]') #Fina
 #print(apartments)
 count_buildings = 0
 
+apartment_information = pd.DataFrame(columns=['room_id', 'room_type', 'available_spaces', 'apt_building', 'floor', 'suite_id', 'bed_spaces', 'timestamp'])
 
 while True:
         start_time = time.time()
-        apartment_information = Table(make_array('room_id', 'room_type', 'available_spaces', 'apt_building', 'floor', 'suite_id', 'bed_spaces'))
-
         for building in apartments: #For each building we can click, click it and begin diving deeper and scraping its information
             if building != driver.find_element_by_id('ELAIDBuilding'):
                 count_buildings+=1
@@ -103,6 +105,7 @@ while True:
                         
                         
                 soup=BeautifulSoup(driver.page_source, 'lxml')
+                timestamp = datetime.utcnow().timestamp()
                 #print(soup)
                 count=0
                 suite_detail_information = soup.find_all('tr', class_="RoomSelectResultsSuiteRow")
@@ -123,26 +126,29 @@ while True:
                         else:
                               bed_space_container = room.find_next_sibling('tr')   
                         bed_spaces = bed_space_container.find_all('tr',class_="bedSpaceContainerItem")
-                        bed_space_array = make_array()
-                        row_entry = make_array()
+                        bed_space_list = []
+                        #row_entry = make_array()
                         for bed_space in bed_spaces:
                             bed_space_id = bed_space['rmsbedspaceid']
                             ##print('bed_space_id: ',bed_space_id)
                             room_type = bed_space.find_all('span')[1].string
                             ###print('room_type: ',room_type)
-                            bed_space_array = np.append(bed_space_array, bed_space_id)
+                            bed_space_list.append(bed_space_id)
+                        
+                        row_entry = len(apartment_information)
+                        apartment_information.loc[row_entry, 'room_id'] = room_id
+                        apartment_information.loc[row_entry, 'room_type'] = room_type_dissect(room_type)
+                        apartment_information.loc[row_entry, 'available_spaces'] = room_availability
+                        apartment_information.loc[row_entry, 'apt_building'] = suite_name_dissect(suite_id)[1]
+                        apartment_information.loc[row_entry, 'floor'] = suite_name_dissect(suite_id)[0]
+                        apartment_information.loc[row_entry, 'suite_id'] = suite_id
+                        apartment_information.loc[row_entry, 'bed_spaces'] = bed_space_list
+                        apartment_information.loc[row_entry, 'timestamp'] = timestamp
 
-                        row_entry = np.append(row_entry, room_id)#
-                        row_entry = np.append(row_entry, room_type_dissect(room_type))#
-                        row_entry = np.append(row_entry, room_availability)#
-                        row_entry = np.append(row_entry, suite_name_dissect(suite_id)[1])#
-                        row_entry = np.append(row_entry, suite_name_dissect(suite_id)[0])#
-                        row_entry = np.append(row_entry, suite_id)#
-                        row_entry = np.append(row_entry, make_array(bed_space_array))#
-                        ###print("LEN: ",len(row_entry), row_entry)
-                        apartment_information = apartment_information.with_rows(make_array(row_entry))
+        #print(apartment_information.to_html())
 
         elapsed_time = time.time()-start_time
         print('elapsed_time', elapsed_time)
         print(driver.current_url)
+        #apartment_information.to_csv('apartment_availability.csv')
 
