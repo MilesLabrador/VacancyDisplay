@@ -1,5 +1,7 @@
-from   selenium import webdriver
-from   selenium.common.exceptions import TimeoutException
+from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import StaleElementReferenceException
+from selenium.common.exceptions import NoSuchElementException
 from AUTH import ucsdsso
 import time
 from bs4 import BeautifulSoup
@@ -15,6 +17,8 @@ def room_type_dissect(room_type):
         return 'double'
     elif 'triple' in room_type.lower():
         return 'triple'
+    elif 'occupied' in room_type.lower():
+        return 'none'
 def suite_name_dissect(suite_id):
     parts = suite_id.split('-')
     #print(suite_id)
@@ -22,7 +26,7 @@ def suite_name_dissect(suite_id):
         floor = None
         apartment_building = parts[0]+'-'+'00'
     else:
-        floor = parts[1][3]
+        floor = parts[1][2]
         apartment_building = parts[0]+'-'+parts[1][0:2]+'00'
     return (floor, apartment_building)
 
@@ -68,21 +72,36 @@ count_buildings = 0
 while True:
         start_time = time.time()
         apartment_information = Table(make_array('room_id', 'room_type', 'available_spaces', 'apt_building', 'floor', 'suite_id', 'bed_spaces'))
+
         for building in apartments: #For each building we can click, click it and begin diving deeper and scraping its information
             if building != driver.find_element_by_id('ELAIDBuilding'):
                 count_buildings+=1
                 ##print("Number of Apartments", len(apartments)-1, "Count investigated", count_buildings)
                 building.click()
                 time.sleep(.05)
+                driver.implicitly_wait(10) # Wait up to 10 seconds to wait for elements to load on page
+                num_rows_opened = 0
+                initial_rows_reported = len(driver.find_elements_by_xpath('//*//tr[@rmsrowmode="RoomRowCollapsed"]//td//img[@class="cbExpandRoomDetails"]'))
+                ###print('initial recorded length: ', initial_rows_reported)
+                while len(driver.find_elements_by_xpath('//*//tr[@rmsrowmode="RoomRowCollapsed"]//td//img[@class="cbExpandRoomDetails"]')) !=0:
+                        ###print('room dropdowns to open: ',len(driver.find_elements_by_xpath('//*//tr[@rmsrowmode="RoomRowCollapsed"]//td//img[@class="cbExpandRoomDetails"]')))
+
+                        try:
+                                driver.implicitly_wait(0)
+                                room = lambda : driver.find_element_by_xpath('//*//tr[@rmsrowmode="RoomRowCollapsed"]//td//img[@class="cbExpandRoomDetails"]') #Find each room element we must click to display room information
+                                room().click()
+                                num_rows_opened+=1
+                        except NoSuchElementException: #Sometimes it tries to look for a room entry to expand despite there not being none left, pass is harmless
+                                pass
+                        except StaleElementReferenceException:
+                                print('EXCEPTION ######################')
+                                pass
+                if initial_rows_reported > num_rows_opened:
+                        print('Incomplete data! There is a row unopened that will bemissing from the table.')
+                ###print('num rows opened: ',num_rows_opened)
                 
-                rooms = driver.find_elements_by_xpath('//*//img[@class="cbExpandRoomDetails"]') #Find each room element we must click to display room information
-                count_room = 0
-                for room in rooms:
-                    count_room+=1
-                    ##print(len(rooms), 'Rooms expanded: ',count_room)
-                    time.sleep(.01)
-                    room.click()
-                time.sleep(.7)
+                        
+                        
                 soup=BeautifulSoup(driver.page_source, 'lxml')
                 #print(soup)
                 count=0
@@ -102,7 +121,7 @@ while True:
                         if room_availability == 0:
                                 bed_space_container = room.find_next_siblings('tr')[1]
                         else:
-                                bed_space_container = room.find_next_sibling('tr')
+                              bed_space_container = room.find_next_sibling('tr')   
                         bed_spaces = bed_space_container.find_all('tr',class_="bedSpaceContainerItem")
                         bed_space_array = make_array()
                         row_entry = make_array()
