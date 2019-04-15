@@ -9,6 +9,17 @@ from datascience import *
 import numpy as np
 from datetime import datetime
 import pandas as pd
+from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
+from selenium import webdriver
+
+profile = FirefoxProfile()
+profile.set_preference('browser.cache.disk.enable', False)
+profile.set_preference('browser.cache.memory.enable', False)
+profile.set_preference('browser.cache.offline.enable', False)
+profile.set_preference("network.http.use-cache", False)
+profile.set_preference('network.cookie.cookieBehavior', 1)
+
+
 
 def available_dissect(room_availability):
         return int(room_availability.replace('(', '').replace(')','').replace('available',''))
@@ -34,7 +45,7 @@ def suite_name_dissect(suite_id):
     return (floor, apartment_building)
 
 
-driver = webdriver.Firefox()
+driver = webdriver.Firefox(firefox_profile=profile)
 
 driver.get("https://hdh2.ucsd.edu/ssoStudent/rmsportal/Home/R") #Link to room selection portal, will prompt us with a login page
 driver.implicitly_wait(10) #Make sure that the login page worked by waiting for elements to load for up to 10 seconds
@@ -90,9 +101,9 @@ while True:
 
                         try:
                                 driver.implicitly_wait(0)
-                                room = lambda : driver.find_element_by_xpath('//*//tr[@rmsrowmode="RoomRowCollapsed"]//td//img[@class="cbExpandRoomDetails"]') #Find each room element we must click to display room information
-                                room().click()
-                                num_rows_opened+=1
+                                for room in driver.find_elements_by_xpath('//*//tr[@rmsrowmode="RoomRowCollapsed"]//td//img[@class="cbExpandRoomDetails"]'):
+                                        room.click()
+                                        num_rows_opened+=1
                         except NoSuchElementException: #Sometimes it tries to look for a room entry to expand despite there not being none left, pass is harmless
                                 pass
                         except StaleElementReferenceException:
@@ -145,10 +156,8 @@ while True:
                         apartment_information.loc[row_entry, 'bed_spaces'] = bed_space_list
                         apartment_information.loc[row_entry, 'timestamp'] = timestamp
 
-        #print(apartment_information.to_html())
+        print(apartment_information.to_html())
 
         elapsed_time = time.time()-start_time
         print('elapsed_time', elapsed_time)
-        print(driver.current_url)
-        #apartment_information.to_csv('apartment_availability.csv')
-
+        #print(driver.current_url)
