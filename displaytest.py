@@ -1,16 +1,15 @@
 from selenium import webdriver
+from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
 from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import NoSuchElementException
 from AUTH import ucsdsso
 import time
 from bs4 import BeautifulSoup
-from datascience import *
 import numpy as np
-from datetime import datetime
 import pandas as pd
-from selenium.webdriver.firefox.firefox_profile import FirefoxProfile
-from selenium import webdriver
+from pandas import Timestamp
+
 
 profile = FirefoxProfile()
 profile.set_preference('browser.cache.disk.enable', False)
@@ -18,8 +17,6 @@ profile.set_preference('browser.cache.memory.enable', False)
 profile.set_preference('browser.cache.offline.enable', False)
 profile.set_preference("network.http.use-cache", False)
 profile.set_preference('network.cookie.cookieBehavior', 1)
-
-
 
 def available_dissect(room_availability):
         return int(room_availability.replace('(', '').replace(')','').replace('available',''))
@@ -44,7 +41,19 @@ def suite_name_dissect(suite_id):
         apartment_building = parts[0]+'-'+parts[1][0:2]+'00'
     return (floor, apartment_building)
 
-
+cache = {}
+def cache_control(room_row, max_len= 9, _cache=cache):
+    key = 'df'
+    cache_list = _cache.setdefault(key, [])
+    if len(cache_list) >= max_len:
+        cache_dump(cache_list, key)
+    cache_list.append(room_row)
+def cache_dump(cache_list, key):
+    df = pd.DataFrame(cache_list)
+    df.to_csv('apartment_availability.csv', mode='a', index=False, header=False)
+    cache_list.clear()
+    df = pd.DataFrame()
+    #display(df)
 driver = webdriver.Firefox(firefox_profile=profile)
 
 driver.get("https://hdh2.ucsd.edu/ssoStudent/rmsportal/Home/R") #Link to room selection portal, will prompt us with a login page
@@ -89,7 +98,6 @@ while True:
         for building in apartments: #For each building we can click, click it and begin diving deeper and scraping its information
             if building != driver.find_element_by_id('ELAIDBuilding'):
                 count_buildings+=1
-                ##print("Number of Apartments", len(apartments)-1, "Count investigated", count_buildings)
                 building.click()
                 time.sleep(.05)
                 driver.implicitly_wait(10) # Wait up to 10 seconds to wait for elements to load on page
@@ -116,7 +124,7 @@ while True:
                         
                         
                 soup=BeautifulSoup(driver.page_source, 'lxml')
-                timestamp = datetime.utcnow().timestamp()
+                timestamp = Timestamp.utcnow()
                 #print(soup)
                 count=0
                 suite_detail_information = soup.find_all('tr', class_="RoomSelectResultsSuiteRow")
@@ -138,26 +146,28 @@ while True:
                               bed_space_container = room.find_next_sibling('tr')   
                         bed_spaces = bed_space_container.find_all('tr',class_="bedSpaceContainerItem")
                         bed_space_list = []
-                        #row_entry = make_array()
                         for bed_space in bed_spaces:
                             bed_space_id = bed_space['rmsbedspaceid']
                             ##print('bed_space_id: ',bed_space_id)
                             room_type = bed_space.find_all('span')[1].string
                             ###print('room_type: ',room_type)
-                            bed_space_list.append(bed_space_id)
+                            bed_space_list.append(bed_space_id)   
                         
-                        row_entry = len(apartment_information)
-                        apartment_information.loc[row_entry, 'room_id'] = room_id
-                        apartment_information.loc[row_entry, 'room_type'] = room_type_dissect(room_type)
-                        apartment_information.loc[row_entry, 'available_spaces'] = room_availability
-                        apartment_information.loc[row_entry, 'apt_building'] = suite_name_dissect(suite_id)[1]
-                        apartment_information.loc[row_entry, 'floor'] = suite_name_dissect(suite_id)[0]
-                        apartment_information.loc[row_entry, 'suite_id'] = suite_id
-                        apartment_information.loc[row_entry, 'bed_spaces'] = bed_space_list
-                        apartment_information.loc[row_entry, 'timestamp'] = timestamp
+                        room_row = {
+                            'room_id':room_id,
+                            'room_type':room_type_dissect(room_type),
+                            'available_spaces':room_availability,
+                            'apt_building':suite_name_dissect(suite_id)[1],
+                            'floor':suite_name_dissect(suite_id)[0],
+                            'suite_id':suite_id,
+                            'bed_spaces':bed_space_list,
+                            'timestamp':timestamp
+                            }
+                        
+                        cache_control(room_row)
+                            
 
-        print(apartment_information.to_html())
-
+        #print(apartment_information.to_html())
         elapsed_time = time.time()-start_time
         print('elapsed_time', elapsed_time)
         #print(driver.current_url)
