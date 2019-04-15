@@ -95,6 +95,7 @@ apartment_information = pd.DataFrame(columns=['room_id', 'room_type', 'available
 
 while True:
         start_time = time.time()
+        timestamp = Timestamp.utcnow()
         for building in apartments: #For each building we can click, click it and begin diving deeper and scraping its information
             if building != driver.find_element_by_id('ELAIDBuilding'):
                 count_buildings+=1
@@ -124,7 +125,6 @@ while True:
                         
                         
                 soup=BeautifulSoup(driver.page_source, 'lxml')
-                timestamp = Timestamp.utcnow()
                 #print(soup)
                 count=0
                 suite_detail_information = soup.find_all('tr', class_="RoomSelectResultsSuiteRow")
